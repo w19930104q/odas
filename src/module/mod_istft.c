@@ -32,17 +32,29 @@
     mod_istft_obj * mod_istft_construct(const mod_istft_cfg * mod_istft_config, const msg_spectra_cfg * msg_spectra_config, const msg_hops_cfg * msg_hops_config) {
 
         mod_istft_obj * obj;
+        unsigned int frameSize;
 
         obj = (mod_istft_obj *) malloc(sizeof(mod_istft_obj));
 
-        obj->freq2frame = freq2frame_construct_zero(2*(msg_spectra_config->halfFrameSize-1), msg_spectra_config->halfFrameSize);
-        obj->frames = frames_construct_zero(msg_hops_config->nChannels,2*(msg_spectra_config->halfFrameSize-1));
-        obj->frame2hop = frame2hop_construct_zero(msg_hops_config->hopSize, 2*(msg_spectra_config->halfFrameSize-1), msg_hops_config->nChannels);
+        frameSize = 2*(msg_spectra_config->halfFrameSize-1);
+
+        obj->freq2frame = freq2frame_construct_zero(frameSize, msg_spectra_config->halfFrameSize);
+        obj->frames = frames_construct_zero(msg_hops_config->nChannels,frameSize);
+        obj->frame2hop = frame2hop_construct_zero(msg_hops_config->hopSize, frameSize, msg_hops_config->nChannels);
 
         obj->in = (msg_spectra_obj *) NULL;
         obj->out = (msg_hops_obj *) NULL;
 
         obj->enabled = 0;
+
+        // Number of hops to emit so the tail samples left in the
+        // overlap-add buffer are flushed out: ceil((frameSize-hopSize)/hopSize)
+        obj->nFlushes = 0;
+        if ((msg_hops_config->hopSize > 0) && (frameSize > msg_hops_config->hopSize)) {
+            obj->nFlushes = (frameSize - 1) / msg_hops_config->hopSize;
+        }
+        obj->flushCount = 0;
+        obj->timeStamp = 0;
 
         return obj;
 
@@ -77,15 +89,34 @@
             }
 
             obj->out->timeStamp = obj->in->timeStamp;
+            obj->timeStamp = obj->in->timeStamp;
 
             rtnValue = 0;
 
         }
         else {
 
-            msg_hops_zero(obj->out);
+            if ((obj->enabled == 1) && (obj->flushCount < obj->nFlushes)) {
 
-            rtnValue = -1;
+                // Drain the tail samples left in the overlap-add buffer
+                // before the stream terminates
+                frame2hop_flush(obj->frame2hop, obj->out->hops);
+
+                obj->timeStamp += (unsigned long long) obj->frame2hop->hopSize;
+                obj->out->timeStamp = obj->timeStamp;
+
+                obj->flushCount++;
+
+                rtnValue = 1;
+
+            }
+            else {
+
+                msg_hops_zero(obj->out);
+
+                rtnValue = -1;
+
+            }
 
         }
 
@@ -108,6 +139,12 @@
     }
 
     void mod_istft_enable(mod_istft_obj * obj) {
+
+        // Restarting the module resets the overlap-add buffer and the
+        // flush state, so the stream restarts from a clean state
+        frame2hop_zero(obj->frame2hop);
+        obj->flushCount = 0;
+        obj->timeStamp = 0;
 
         obj->enabled = 1;
 

@@ -32,17 +32,29 @@
     mod_stft_obj * mod_stft_construct(const mod_stft_cfg * mod_stft_config, const msg_hops_cfg * msg_hops_config, const msg_spectra_cfg * msg_spectra_config) {
 
         mod_stft_obj * obj;
+        unsigned int frameSize;
 
         obj = (mod_stft_obj *) malloc(sizeof(mod_stft_obj));
 
-        obj->hop2frame =  hop2frame_construct_zero(msg_hops_config->hopSize, 2*(msg_spectra_config->halfFrameSize-1),msg_hops_config->nChannels);
-        obj->frames = frames_construct_zero(msg_hops_config->nChannels,2*(msg_spectra_config->halfFrameSize-1));
-        obj->frame2freq = frame2freq_construct_zero(2*(msg_spectra_config->halfFrameSize-1), msg_spectra_config->halfFrameSize);
+        frameSize = 2*(msg_spectra_config->halfFrameSize-1);
+
+        obj->hop2frame =  hop2frame_construct_zero(msg_hops_config->hopSize, frameSize, msg_hops_config->nChannels);
+        obj->frames = frames_construct_zero(msg_hops_config->nChannels,frameSize);
+        obj->frame2freq = frame2freq_construct_zero(frameSize, msg_spectra_config->halfFrameSize);
 
         obj->in = (msg_hops_obj *) NULL;
         obj->out = (msg_spectra_obj *) NULL;
 
         obj->enabled = 0;
+
+        // Number of zero-padded hops to push so the tail samples left in
+        // the sliding window are flushed out: ceil((frameSize-hopSize)/hopSize)
+        obj->nFlushes = 0;
+        if ((msg_hops_config->hopSize > 0) && (frameSize > msg_hops_config->hopSize)) {
+            obj->nFlushes = (frameSize - 1) / msg_hops_config->hopSize;
+        }
+        obj->flushCount = 0;
+        obj->timeStamp = 0;
 
         return obj;
 
@@ -77,15 +89,35 @@
             }
 
             obj->out->timeStamp = obj->in->timeStamp;
+            obj->timeStamp = obj->in->timeStamp;
 
             rtnValue = 0;
 
         }
         else {
 
-            msg_spectra_zero(obj->out);
+            if ((obj->enabled == 1) && (obj->flushCount < obj->nFlushes)) {
 
-            rtnValue = -1;
+                // Push zero hops to drain the tail samples left in the
+                // sliding window before the stream terminates
+                hop2frame_flush(obj->hop2frame, obj->frames);
+                frame2freq_process(obj->frame2freq, obj->frames, obj->out->freqs);
+
+                obj->timeStamp += (unsigned long long) obj->hop2frame->hopSize;
+                obj->out->timeStamp = obj->timeStamp;
+
+                obj->flushCount++;
+
+                rtnValue = 1;
+
+            }
+            else {
+
+                msg_spectra_zero(obj->out);
+
+                rtnValue = -1;
+
+            }
 
         }
 
@@ -108,6 +140,12 @@
     }
 
     void mod_stft_enable(mod_stft_obj * obj) {
+
+        // Restarting the module resets the sliding window and the flush
+        // state, so the stream restarts from a clean state
+        hop2frame_zero(obj->hop2frame);
+        obj->flushCount = 0;
+        obj->timeStamp = 0;
 
         obj->enabled = 1;
 

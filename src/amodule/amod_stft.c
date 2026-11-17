@@ -92,20 +92,32 @@
 
         obj = (amod_stft_obj *) ptr;
 
+        msg_hops_in = (msg_hops_obj *) NULL;
+
         while(1) {
 
             // Pop a message, process, and push back
-            msg_hops_in = amsg_hops_filled_pop(obj->in);
+            // (while flushing the tail, the empty input message is kept
+            // and reused for the next flush step)
+            if (msg_hops_in == (msg_hops_obj *) NULL) {
+                msg_hops_in = amsg_hops_filled_pop(obj->in);
+            }
             msg_spectra_out = amsg_spectra_empty_pop(obj->out);
             mod_stft_connect(obj->mod_stft, msg_hops_in, msg_spectra_out);
             rtnValue = mod_stft_process(obj->mod_stft);
             mod_stft_disconnect(obj->mod_stft);
-            amsg_hops_empty_push(obj->in, msg_hops_in);
             amsg_spectra_filled_push(obj->out, msg_spectra_out);
 
             // If this is the last frame, rtnValue = -1
             if (rtnValue == -1) {
+                amsg_hops_empty_push(obj->in, msg_hops_in);
                 break;
+            }
+
+            // If a frame was processed, return the input message
+            if (rtnValue == 0) {
+                amsg_hops_empty_push(obj->in, msg_hops_in);
+                msg_hops_in = (msg_hops_obj *) NULL;
             }
 
         }

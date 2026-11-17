@@ -42,26 +42,39 @@
         frame2freq_obj * frame2freq;
 
         msg_hops_obj * in;
-        msg_spectra_obj * out;        
+        msg_spectra_obj * out;
 
         char enabled;
+
+        // Tail flush state: number of zero-padded frames required to drain
+        // the sliding window at the end of the stream, and how many have
+        // been emitted so far
+        unsigned int nFlushes;
+        unsigned int flushCount;
+        unsigned long long timeStamp;
 
     } mod_stft_obj;
 
     typedef struct mod_stft_cfg {
-        
+
     } mod_stft_cfg;
 
     mod_stft_obj * mod_stft_construct(const mod_stft_cfg * mod_stft_config, const msg_hops_cfg * msg_hops_config, const msg_spectra_cfg * msg_spectra_config);
 
     void mod_stft_destroy(mod_stft_obj * obj);
 
+    // Return value:
+    //   0: frame processed
+    //   1: tail flush in progress, call again with the same (empty) input message
+    //  -1: stream terminated
     int mod_stft_process(mod_stft_obj * obj);
 
     void mod_stft_connect(mod_stft_obj * obj, msg_hops_obj * in, msg_spectra_obj * out);
 
     void mod_stft_disconnect(mod_stft_obj * obj);
 
+    // (Re)starting the module resets the sliding window and the flush
+    // state, so a restarted stream always begins from a clean state
     void mod_stft_enable(mod_stft_obj * obj);
 
     void mod_stft_disable(mod_stft_obj * obj);

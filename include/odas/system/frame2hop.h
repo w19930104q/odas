@@ -49,6 +49,13 @@
 
     void frame2hop_destroy(frame2hop_obj * obj);
 
+    // Reset the overlap-add buffer to zero (stream restart)
+    void frame2hop_zero(frame2hop_obj * obj);
+
     void frame2hop_process(frame2hop_obj * obj, const frames_obj * frames, hops_obj * hops);
+
+    // Shift the overlap-add buffer without adding a new frame and emit the
+    // resulting hop, so the tail of the stream is flushed out
+    void frame2hop_flush(frame2hop_obj * obj, hops_obj * hops);
 
 #endif

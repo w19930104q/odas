@@ -65,12 +65,29 @@
 
     }
 
+    void frame2hop_zero(frame2hop_obj * obj) {
+
+        unsigned int iSignal;
+
+        for (iSignal = 0; iSignal < obj->nSignals; iSignal++) {
+            memset(obj->array[iSignal], 0x00, sizeof(float) * obj->frameSize);
+        }
+
+    }
+
     void frame2hop_process(frame2hop_obj * obj, const frames_obj * frames, hops_obj * hops) {
 
         unsigned int iSignal;
         unsigned int iSample;
+        unsigned int nSignals;
 
-        for (iSignal = 0; iSignal < obj->nSignals; iSignal++) {
+        // Never read or write past the smallest of the overlap-add buffer,
+        // the input frames and the output hops
+        nSignals = obj->nSignals;
+        if (frames->nSignals < nSignals) { nSignals = frames->nSignals; }
+        if (hops->nSignals < nSignals) { nSignals = hops->nSignals; }
+
+        for (iSignal = 0; iSignal < nSignals; iSignal++) {
 
             memmove(&(obj->array[iSignal][0]),
                     &(obj->array[iSignal][obj->hopSize]),
@@ -85,6 +102,37 @@
                 obj->array[iSignal][iSample] += frames->array[iSignal][iSample];
 
             }
+
+            memcpy(&(hops->array[iSignal][0]),
+                   &(obj->array[iSignal][0]),
+                   sizeof(float) * obj->hopSize);
+
+        }
+
+        // Zero the channels that have no matching input, if any
+        for (iSignal = nSignals; iSignal < hops->nSignals; iSignal++) {
+            memset(hops->array[iSignal], 0x00, sizeof(float) * hops->hopSize);
+        }
+
+    }
+
+    void frame2hop_flush(frame2hop_obj * obj, hops_obj * hops) {
+
+        unsigned int iSignal;
+        unsigned int nSignals;
+
+        nSignals = obj->nSignals;
+        if (hops->nSignals < nSignals) { nSignals = hops->nSignals; }
+
+        for (iSignal = 0; iSignal < nSignals; iSignal++) {
+
+            memmove(&(obj->array[iSignal][0]),
+                    &(obj->array[iSignal][obj->hopSize]),
+                    sizeof(float) * (obj->frameSize - obj->hopSize));
+
+            memset(&(obj->array[iSignal][obj->frameSize - obj->hopSize]),
+                   0x00,
+                   sizeof(float) * (obj->hopSize));
 
             memcpy(&(hops->array[iSignal][0]),
                    &(obj->array[iSignal][0]),

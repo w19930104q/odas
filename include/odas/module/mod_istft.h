@@ -42,27 +42,40 @@
         frames_obj * frames;
         frame2hop_obj * frame2hop;
 
-        msg_spectra_obj * in;        
+        msg_spectra_obj * in;
         msg_hops_obj * out;
 
         char enabled;
 
+        // Tail flush state: number of hops required to drain the
+        // overlap-add buffer at the end of the stream, and how many have
+        // been emitted so far
+        unsigned int nFlushes;
+        unsigned int flushCount;
+        unsigned long long timeStamp;
+
     } mod_istft_obj;
 
     typedef struct mod_istft_cfg {
-        
+
     } mod_istft_cfg;
 
     mod_istft_obj * mod_istft_construct(const mod_istft_cfg * mod_istft_config, const msg_spectra_cfg * msg_spectra_config, const msg_hops_cfg * msg_hops_config);
 
     void mod_istft_destroy(mod_istft_obj * obj);
 
+    // Return value:
+    //   0: frame processed
+    //   1: tail flush in progress, call again with the same (empty) input message
+    //  -1: stream terminated
     int mod_istft_process(mod_istft_obj * obj);
 
     void mod_istft_connect(mod_istft_obj * obj, msg_spectra_obj * in, msg_hops_obj * out);
 
     void mod_istft_disconnect(mod_istft_obj * obj);
 
+    // (Re)starting the module resets the overlap-add buffer and the flush
+    // state, so a restarted stream always begins from a clean state
     void mod_istft_enable(mod_istft_obj * obj);
 
     void mod_istft_disable(mod_istft_obj * obj);

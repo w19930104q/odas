@@ -61,8 +61,14 @@
 
         unsigned int iSignal;
         unsigned int iSample;
+        unsigned int nSignals;
 
-        for (iSignal = 0; iSignal < frames->nSignals; iSignal++) {
+        // Never read or write past the smallest of the input freqs and
+        // the output frames
+        nSignals = freqs->nSignals;
+        if (frames->nSignals < nSignals) { nSignals = frames->nSignals; }
+
+        for (iSignal = 0; iSignal < nSignals; iSignal++) {
 
             fft_c2r(obj->fft, 
                     freqs->array[iSignal],
@@ -74,6 +80,11 @@
 
             }
 
+        }
+
+        // Zero the channels that have no matching input, if any
+        for (iSignal = nSignals; iSignal < frames->nSignals; iSignal++) {
+            memset(frames->array[iSignal], 0x00, sizeof(float) * obj->frameSize);
         }
 
     }

@@ -49,6 +49,13 @@
 
     void hop2frame_destroy(hop2frame_obj * obj);
 
+    // Reset the sliding window to zero (stream restart)
+    void hop2frame_zero(hop2frame_obj * obj);
+
     void hop2frame_process(hop2frame_obj * obj, const hops_obj * hops, frames_obj * frames);
+
+    // Push a zero hop in the sliding window and emit the resulting frame,
+    // so the samples left in the tail of the stream are flushed out
+    void hop2frame_flush(hop2frame_obj * obj, frames_obj * frames);
 
 #endif
